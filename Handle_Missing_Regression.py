@@ -178,7 +178,7 @@ def handle_missing_data(train_data, method):
 
 # Function to train and evaluate HistGradientBoostingRegressor
 def train_hist_gradient_boosting(X_train, y_train, X_test, y_test):
-    pipeline = HistGradientBoostingRegressor(max_iter=100, random_state=0)
+    pipeline = HistGradientBoostingRegressor(max_iter=100)
     y_train_pred = cross_val_predict(pipeline, X_train, y_train, cv=10)
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
@@ -199,7 +199,7 @@ def train_hist_gradient_boosting(X_train, y_train, X_test, y_test):
 
 # Function to train and evaluate CatBoostRegressor
 def train_catboost(X_train, y_train, X_test, y_test):
-    pipeline = CatBoostRegressor(iterations=1000, learning_rate=0.1, depth=6, loss_function='RMSE', random_seed=0, silent=True)
+    pipeline = CatBoostRegressor(iterations=1000, learning_rate=0.1, depth=6, random_seed=0, silent=True)
     y_train_pred = cross_val_predict(pipeline, X_train, y_train, cv=10)
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
