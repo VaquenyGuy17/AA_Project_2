@@ -1,23 +1,16 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
-from sklearn.manifold import Isomap
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split, cross_val_predict
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.preprocessing import StandardScaler, PolynomialFeatures
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import RidgeCV
+from sklearn.model_selection import train_test_split
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
-from sklearn.ensemble import HistGradientBoostingRegressor
-from catboost import CatBoostRegressor
-import seaborn as sns
-import missingno as msno
+from sklearn.ensemble import StackingRegressor, GradientBoostingRegressor, RandomForestRegressor, \
+    HistGradientBoostingRegressor
+import warnings
+
+warnings.filterwarnings("ignore")
 
 
-#function to make and visualize the graphs on screen
 def plot_y_yhat(y_val, y_pred, plot_title="plot"):
     MAX = 500
     if len(y_val) > MAX:
@@ -39,67 +32,46 @@ def plot_y_yhat(y_val, y_pred, plot_title="plot"):
     plt.show()
 
 
-# Main function to train and evaluate models
-def baselineModel():
-    train_data = pd.read_csv('train_data.csv')
-    test_data = pd.read_csv('test_data.csv')
+def handle_missing_data(train_data, method="iterative"):
+    if method == 'mean':
+        train_data.fillna(train_data.mean(), inplace=True)
+    elif method == 'median':
+        train_data.fillna(train_data.median(), inplace=True)
+    elif method == 'iterative':
+        imputer = IterativeImputer(max_iter=10)
+        numeric_cols = train_data.select_dtypes(include=[np.number]).columns
+        train_data[numeric_cols] = imputer.fit_transform(train_data[numeric_cols])
+    else:
+        raise ValueError("Invalid imputation method specified.")
+    return train_data
 
-    X_train, X_test, y_train, y_test, X_labeled, X_unlabeled = divideDataset(train_data)
 
-    print("Training Semi-supervised model...")
-    model = semi_supervised(X_train, y_train, X_test, y_test, X_labeled, X_unlabeled)
-
-    test_data = test_data.drop(columns=["id"])
-    create_csv(model, test_data)
-
-
-# Function to divide and process the dataset
 def divideDataset(train_data):
-    labeled_data = train_data.dropna(subset=['SurvivalTime'])
-    unlabeled_data = train_data[train_data['SurvivalTime'].isnull()]
+    train_data = handle_missing_data(train_data, "iterative")
+    train_data_clean = train_data.dropna(subset=['SurvivalTime'])
+    train_data_clean = train_data_clean[train_data_clean['Censored'] == 0]
+    print("Number of remaining points:", len(train_data_clean))
 
-    print(f"Labeled data: {labeled_data.shape}")
-    print(f"Unlabeled data: {unlabeled_data.shape}")
-
-    combined_data = pd.concat([labeled_data, unlabeled_data], ignore_index=True)
-    combined_data = handle_missing_data(combined_data)
-
-    labeled_data = combined_data.loc[combined_data['SurvivalTime'].notnull()]
-    unlabeled_data = combined_data.loc[combined_data['SurvivalTime'].isnull()]
-
-    X_labeled = labeled_data.drop(columns=['SurvivalTime', 'Censored', 'id'])
-    y_labeled = labeled_data['SurvivalTime'].values
-
-    X_unlabeled = unlabeled_data.drop(columns=['SurvivalTime', 'Censored', 'id'])
-
-    X_train, X_test, y_train, y_test = train_test_split(X_labeled, y_labeled, test_size=0.2, random_state=42)
-    return X_train, X_test, y_train, y_test, X_labeled, X_unlabeled
+    X = train_data_clean.drop(columns=['SurvivalTime', 'Censored', 'id'])
+    y = train_data_clean['SurvivalTime'].values
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    return X_train, X_test, y_train, y_test
 
 
-# Function to handle missing data
-def handle_missing_data(data):
-    imputer = IterativeImputer(max_iter=10)
-    numeric_cols = data.select_dtypes(include=[np.number]).columns
-    data[numeric_cols] = imputer.fit_transform(data[numeric_cols])
-    return data
 
-
-# Function for Semi-supervised learning
-def semi_supervised(X_train, y_train, X_test, y_test, X_labeled, X_unlabeled):
-    pipeline = HistGradientBoostingRegressor(max_iter=15)
-    y_train_pred = cross_val_predict(pipeline, X_train, y_train, cv=10)
+def train_model(X_train, y_train, X_test, y_test):
+    pipeline = HistGradientBoostingRegressor(max_iter=100)
     pipeline.fit(X_train, y_train)
+    y_train_pred = pipeline.predict(X_train)
     y_test_pred = pipeline.predict(X_test)
 
-    # Calculate metrics using the custom error metric
-    c = np.zeros_like(y_test)  # Since we are working with uncensored data
+    c = np.zeros_like(y_test)
     train_error = error_metric(y_train, y_train_pred, c=np.zeros_like(y_train))
     test_error = error_metric(y_test, y_test_pred, c)
 
     print(f"Train Error Metric: {train_error:.4f}")
     print(f"Test Error Metric: {test_error:.4f}")
-
-    plot_y_yhat(y_test, y_test_pred, plot_title="semi_supervised_model")
+    plot_y_yhat(y_test, y_test_pred, "Stacking Regressor")
     return pipeline
 
 
@@ -110,11 +82,19 @@ def error_metric(y, y_hat, c):
     return np.sum(err)/err.shape[0]
 
 
-def create_csv(model, test_data):
-    result = model.predict(test_data)
-    result = pd.DataFrame(result).rename(columns={0:'0'})
+def baselineModel():
+    train_data = pd.read_csv('train_data.csv')
+    test_data = pd.read_csv('test_data.csv')
+
+    X_train, X_test, y_train, y_test = divideDataset(train_data)
+    model = train_model(X_train, y_train, X_test, y_test)
+
+    test_data_clean = handle_missing_data(test_data, "iterative").drop(columns=["id"])
+    result = model.predict(test_data_clean)
+    result = pd.DataFrame(result).rename(columns={0: '0'})
     result.index.name = "id"
-    result.to_csv('optional-submission-01.csv.csv')
+    result.to_csv('optional-submission-05.csv')
+
 
 
 baselineModel()

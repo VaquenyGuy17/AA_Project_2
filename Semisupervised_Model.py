@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
 from sklearn.manifold import Isomap
-from sklearn.metrics import mean_squared_error, root_mean_squared_error
 from sklearn.model_selection import train_test_split, cross_val_predict
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
@@ -11,16 +10,13 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import RidgeCV
-from sklearn.experimental import enable_iterative_imputer  # This enables IterativeImputer
+from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import SimpleImputer, KNNImputer, IterativeImputer
-import time
 import missingno as msno
-import seaborn as sns
 from sklearn.ensemble import HistGradientBoostingRegressor
 from catboost import CatBoostRegressor
 
 
-#function to make and visualize the graphs on screen
 def plot_y_yhat(y_val, y_pred, plot_title="plot"):
     MAX = 500
     if len(y_val) > MAX:
@@ -43,7 +39,6 @@ def plot_y_yhat(y_val, y_pred, plot_title="plot"):
 
 
 def baselineModel():
-    #Load the datasets
     train_data = pd.read_csv('train_data.csv')
     test_data = pd.read_csv('test_data.csv')
 
@@ -68,20 +63,16 @@ def baselineModel():
 
 
 def divideDataset(train_data):
-    # Separate labeled and unlabeled data
-    labeled_data = train_data.dropna(subset=['SurvivalTime'])  # Keep only rows with SurvivalTime
-    unlabeled_data = train_data[train_data['SurvivalTime'].isnull()]  # Rows with missing SurvivalTime
+    labeled_data = train_data.dropna(subset=['SurvivalTime'])
+    unlabeled_data = train_data[train_data['SurvivalTime'].isnull()]
 
     print("Labeled data size:", labeled_data.shape)
     print("Unlabeled data size:", unlabeled_data.shape)
 
-    # Combine labeled and unlabeled data for imputation
     combined_data = pd.concat([labeled_data, unlabeled_data], ignore_index=True)
 
-    # Handle missing data with IterativeImputer
     combined_data = handle_missing_data(combined_data, "iterative")
 
-    # Re-split labeled data
     labeled_data = combined_data.loc[combined_data['SurvivalTime'].notnull()]
     unlabeled_data = combined_data.loc[combined_data['SurvivalTime'].isnull()]
 
@@ -90,12 +81,10 @@ def divideDataset(train_data):
 
     X_unlabeled = unlabeled_data.drop(columns=['SurvivalTime', 'Censored', 'id'])
 
-    # Split labeled data into training and testing
     X_train, X_test, y_train, y_test = train_test_split(X_labeled, y_labeled, test_size=0.2)
     return X_train, X_test, y_train, y_test, X_labeled, X_unlabeled
 
 
-# function with the linear regression model of the problem
 def linearRegression(X_train, y_train, X_test, y_test):
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
@@ -105,15 +94,13 @@ def linearRegression(X_train, y_train, X_test, y_test):
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
 
-    # Calculate metrics using the custom error metric
-    c = np.zeros_like(y_test)  # Since we are working with uncensored data
+    c = np.zeros_like(y_test)
     train_error = error_metric(y_train, y_train_pred, c=np.zeros_like(y_train))
     test_error = error_metric(y_test, y_test_pred, c)
 
     print(f"Train Error Metric: {train_error:.4f}")
     print(f"Test Error Metric: {test_error:.4f}")
 
-    # Plotting y-y hat plot for test data
     plot_y_yhat(np.expand_dims(y_test, axis=-1), np.expand_dims(y_test_pred, axis=-1), plot_title="linear_regression_baseline")
 
     return pipeline
@@ -129,15 +116,13 @@ def val_poly_regression(X_train, y_train, X_test, y_test, regressor=RidgeCV(alph
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
 
-    # Calculate metrics using the custom error metric
-    c = np.zeros_like(y_test)  # Since we are working with uncensored data
+    c = np.zeros_like(y_test)
     train_error = error_metric(y_train, y_train_pred, c=np.zeros_like(y_train))
     test_error = error_metric(y_test, y_test_pred, c)
 
     print(f"Train Error Metric: {train_error:.4f}")
     print(f"Test Error Metric: {test_error:.4f}")
 
-    # Plotting y-y hat plot for test data
     plot_y_yhat(np.expand_dims(y_test, axis=-1), np.expand_dims(y_test_pred, axis=-1), plot_title="polynomial_model")
 
     return pipeline
@@ -149,15 +134,13 @@ def val_knn_regression(X_train, y_train, X_test, y_test, k=30):
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
 
-    # Calculate metrics using the custom error metric
-    c = np.zeros_like(y_test)  # Since we are working with uncensored data
+    c = np.zeros_like(y_test)
     train_error = error_metric(y_train, y_train_pred, c=np.zeros_like(y_train))
     test_error = error_metric(y_test, y_test_pred, c)
 
     print(f"Train Error Metric: {train_error:.4f}")
     print(f"Test Error Metric: {test_error:.4f}")
 
-    # Plotting y-y hat plot for test data
     plot_y_yhat(np.expand_dims(y_test, axis=-1), np.expand_dims(y_test_pred, axis=-1), plot_title="polynomial_model")
 
     return pipeline
@@ -181,49 +164,42 @@ def handle_missing_data(train_data, method):
     return train_data
 
 
-# Function to train and evaluate HistGradientBoostingRegressor
 def train_hist_gradient_boosting(X_train, y_train, X_test, y_test):
     pipeline = HistGradientBoostingRegressor(max_iter=100)
     y_train_pred = cross_val_predict(pipeline, X_train, y_train, cv=10)
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
 
-    # Calculate metrics using the custom error metric
-    c = np.zeros_like(y_test)  # Since we are working with uncensored data
+    c = np.zeros_like(y_test)
     train_error = error_metric(y_train, y_train_pred, c=np.zeros_like(y_train))
     test_error = error_metric(y_test, y_test_pred, c)
 
     print(f"Train Error Metric: {train_error:.4f}")
     print(f"Test Error Metric: {test_error:.4f}")
 
-    # Plotting y-y hat plot for test data
     plot_y_yhat(np.expand_dims(y_test, axis=-1), np.expand_dims(y_test_pred, axis=-1), plot_title="polynomial_model")
 
     return pipeline
 
 
-# Function to train and evaluate CatBoostRegressor
 def train_catboost(X_train, y_train, X_test, y_test):
     pipeline = CatBoostRegressor(iterations=1000, learning_rate=0.1, depth=6, silent=True)
     y_train_pred = cross_val_predict(pipeline, X_train, y_train, cv=10)
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
 
-    # Calculate metrics using the custom error metric
-    c = np.zeros_like(y_test)  # Since we are working with uncensored data
+    c = np.zeros_like(y_test)
     train_error = error_metric(y_train, y_train_pred, c=np.zeros_like(y_train))
     test_error = error_metric(y_test, y_test_pred, c)
 
     print(f"Train Error Metric: {train_error:.4f}")
     print(f"Test Error Metric: {test_error:.4f}")
 
-    # Plotting y-y hat plot for test data
     plot_y_yhat(np.expand_dims(y_test, axis=-1), np.expand_dims(y_test_pred, axis=-1), plot_title="polynomial_model")
 
     return pipeline
 
 
-# FrozenTransformer class
 class FrozenTransformer(BaseEstimator):
     def __init__(self, fitted_transformer):
         self.fitted_transformer = fitted_transformer
@@ -244,9 +220,7 @@ class FrozenTransformer(BaseEstimator):
         return self.fitted_transformer.transform(X)
 
 
-# Semi-supervised baseline model implementation
 def semi_supervised(X_train, y_train, X_test, y_test, X_labeled, X_unlabeled):
-    # Standardize data and reduce dimensions with Isomap
     scaler = StandardScaler()
     X_combined_scaled = scaler.fit_transform(pd.concat([X_labeled, X_unlabeled]))
     isomap = Isomap(n_components=9)
@@ -263,8 +237,7 @@ def semi_supervised(X_train, y_train, X_test, y_test, X_labeled, X_unlabeled):
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
 
-    # Calculate metrics using the custom error metric
-    c = np.zeros_like(y_test)  # Since we are working with uncensored data
+    c = np.zeros_like(y_test)
     train_error = error_metric(y_train, y_train_pred, c=np.zeros_like(y_train))
     test_error = error_metric(y_test, y_test_pred, c)
 
@@ -298,4 +271,3 @@ def error_metric(y, y_hat, c):
 
 
 baselineModel()
-

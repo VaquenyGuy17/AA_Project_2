@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_squared_error, root_mean_squared_error
 from sklearn.model_selection import train_test_split, cross_val_predict
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
@@ -9,12 +8,9 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import RidgeCV
-import time
 import missingno as msno
-import seaborn as sns
 
 
-#function to make and visualize the graphs on screen
 def plot_y_yhat(y_val, y_pred, plot_title="plot"):
     MAX = 500
     if len(y_val) > MAX:
@@ -37,7 +33,6 @@ def plot_y_yhat(y_val, y_pred, plot_title="plot"):
 
 
 def baselineModel():
-    #Load the datasets
     train_data = pd.read_csv('train_data.csv')
     test_data = pd.read_csv('test_data.csv')
 
@@ -54,33 +49,28 @@ def baselineModel():
 
 
 def divideDataset(train_data):
-    train_data_clean = train_data.dropna(subset=['SurvivalTime'])  # Remove rows with missing 'SurvivalTime'
-    train_data_clean = train_data_clean[train_data_clean['Censored'] == 0]  # Keep only uncensored data points
-    train_data_clean = train_data_clean.dropna(axis=1)  # Drop columns with any missing values
+    train_data_clean = train_data.dropna(subset=['SurvivalTime'])
+    train_data_clean = train_data_clean[train_data_clean['Censored'] == 0]
+    train_data_clean = train_data_clean.dropna(axis=1)
     print("Number of remaining points:", len(train_data_clean))
 
-    # Check the pairplot between remaining features and the target variable
     #sns.pairplot(train_data_clean, y_vars=['SurvivalTime'], x_vars=train_data_clean.columns.drop(['SurvivalTime', 'Censored']))
     #plt.show()
 
     X = train_data_clean.drop(columns=['SurvivalTime', 'Censored', 'id'])
     y = train_data_clean['SurvivalTime'].values
 
-    # Train-validation-test split (70-15-15)
     #X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3)
     #X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5)
 
-    # Alternatively, train-test split with cross-validation
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
-    # Comment on validation efficiency
     print("Using a train-validation-test split allows for testing the model on both validation and test sets separately, providing a better performance estimate on unseen data.")
     print("Cross-validation is more data-efficient for smaller datasets, as it uses the entire dataset in a rotating fashion for training and validation, rather than setting aside a fixed validation set.")
 
     return X_train, X_test, y_train, y_test
 
 
-# function with the linear regression model of the problem
 def linearRegression(X_train, y_train, X_test, y_test):
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
@@ -90,15 +80,13 @@ def linearRegression(X_train, y_train, X_test, y_test):
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
 
-    # Calculate metrics using the custom error metric
-    c = np.zeros_like(y_test)  # Since we are working with uncensored data
+    c = np.zeros_like(y_test)
     train_error = error_metric(y_train, y_train_pred, c=np.zeros_like(y_train))
     test_error = error_metric(y_test, y_test_pred, c)
 
     print(f"Train Error Metric: {train_error:.4f}")
     print(f"Test Error Metric: {test_error:.4f}")
 
-    # Plotting y-y hat plot for test data
     plot_y_yhat(np.expand_dims(y_test, axis=-1), np.expand_dims(y_test_pred, axis=-1), plot_title="linear_regression_baseline")
 
     return pipeline
@@ -114,15 +102,13 @@ def val_poly_regression(X_train, y_train, X_test, y_test, regressor=RidgeCV(alph
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
 
-    # Calculate metrics using the custom error metric
-    c = np.zeros_like(y_test)  # Since we are working with uncensored data
+    c = np.zeros_like(y_test)
     train_error = error_metric(y_train, y_train_pred, c=np.zeros_like(y_train))
     test_error = error_metric(y_test, y_test_pred, c)
 
     print(f"Train Error Metric: {train_error:.4f}")
     print(f"Test Error Metric: {test_error:.4f}")
 
-    # Plotting y-y hat plot for test data
     plot_y_yhat(np.expand_dims(y_test, axis=-1), np.expand_dims(y_test_pred, axis=-1), plot_title="polynomial_model")
 
     return pipeline
@@ -134,15 +120,13 @@ def val_knn_regression(X_train, y_train, X_test, y_test, k=30):
     pipeline.fit(X_train, y_train)
     y_test_pred = pipeline.predict(X_test)
 
-    # Calculate metrics using the custom error metric
-    c = np.zeros_like(y_test)  # Since we are working with uncensored data
+    c = np.zeros_like(y_test)
     train_error = error_metric(y_train, y_train_pred, c=np.zeros_like(y_train))
     test_error = error_metric(y_test, y_test_pred, c)
 
     print(f"Train Error Metric: {train_error:.4f}")
     print(f"Test Error Metric: {test_error:.4f}")
 
-    # Plotting y-y hat plot for test data
     plot_y_yhat(np.expand_dims(y_test, axis=-1), np.expand_dims(y_test_pred, axis=-1), plot_title="polynomial_model")
 
     return pipeline
@@ -171,6 +155,3 @@ def error_metric(y, y_hat, c):
 
 
 baselineModel()
-
-
-#DONE!
